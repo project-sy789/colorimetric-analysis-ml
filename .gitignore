@@ -30,6 +30,9 @@ venv.bak/
 # Streamlit
 .streamlit/
 
+# Kiro IDE
+.kiro/
+
 # IDE
 .vscode/
 .idea/
