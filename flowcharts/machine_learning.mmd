@@ -1,0 +1,35 @@
+graph TB
+    Start([เริ่มเทรนโมเดล]) --> LoadCSV[โหลดข้อมูลจาก<br/>profile_dataset.csv]
+    LoadCSV --> ValidateData{ตรวจสอบข้อมูล}
+    ValidateData -->|ข้อมูลไม่ครบ| Error1[Error: ขาดคอลัมน์]
+    ValidateData -->|< 5 ตัวอย่าง| Error2[Error: ข้อมูลไม่เพียงพอ]
+    ValidateData -->|RGB นอกช่วง| Error3[Error: ค่า RGB ไม่ถูกต้อง]
+    ValidateData -->|ผ่าน| SplitData[แยกข้อมูล<br/>X = R,G,B<br/>Y = Concentration]
+    
+    Error1 --> End1([จบ])
+    Error2 --> End1
+    Error3 --> End1
+    
+    SplitData --> CreateModel[สร้าง Random Forest<br/>n_estimators=100<br/>random_state=42]
+    CreateModel --> FitModel[เทรนโมเดล<br/>model.fit X, Y]
+    FitModel --> CalcR2[คำนวณ R² Score<br/>score = model.score X, Y]
+    CalcR2 --> SaveModel[บันทึก Model<br/>joblib.dump]
+    SaveModel --> InterpretR2{ตีความ R² Score}
+    
+    InterpretR2 -->|≥ 0.9| Excellent[🎯 ความแม่นยำสูงมาก]
+    InterpretR2 -->|0.7-0.9| Good[👍 ความแม่นยำดี]
+    InterpretR2 -->|0.5-0.7| Moderate[⚠️ ความแม่นยำปานกลาง]
+    InterpretR2 -->|< 0.5| Poor[❌ ควรรวบรวมข้อมูลเพิ่ม]
+    
+    Excellent --> End2([จบ])
+    Good --> End2
+    Moderate --> End2
+    Poor --> End2
+    
+    style Start fill:#90EE90
+    style End1 fill:#FFB6C1
+    style End2 fill:#FFB6C1
+    style Excellent fill:#90EE90
+    style Good fill:#87CEEB
+    style Moderate fill:#FFD700
+    style Poor fill:#FF6B6B

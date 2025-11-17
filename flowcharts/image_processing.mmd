@@ -1,0 +1,17 @@
+graph TB
+    Start([รับภาพจาก User]) --> Validate[ตรวจสอบรูปแบบไฟล์<br/>PNG/JPG/JPEG]
+    Validate --> ReadImage[อ่านภาพด้วย OpenCV]
+    ReadImage --> ConvertColor[แปลงสีจาก BGR → RGB]
+    ConvertColor --> GetSize[หาขนาดภาพ<br/>Width × Height]
+    GetSize --> CalcCenter[คำนวณจุดกลางภาพ<br/>Center X, Center Y]
+    CalcCenter --> ApplyOffset[ปรับตำแหน่ง ROI<br/>Center + Offset X,Y]
+    ApplyOffset --> CheckSize{ภาพใหญ่กว่า<br/>ROI Size?}
+    CheckSize -->|ไม่| UseFullImage[ใช้ภาพทั้งหมด]
+    CheckSize -->|ใช่| ExtractROI[ตัดเอาพื้นที่ ROI<br/>ROI Size × ROI Size]
+    UseFullImage --> CalcMean[คำนวณค่าเฉลี่ย<br/>R, G, B]
+    ExtractROI --> CalcMean
+    CalcMean --> DrawBox[วาดกรอบ ROI<br/>สีเขียวบนภาพ]
+    DrawBox --> Return([ส่งคืน R, G, B<br/>และภาพที่มีกรอบ])
+    
+    style Start fill:#90EE90
+    style Return fill:#FFB6C1

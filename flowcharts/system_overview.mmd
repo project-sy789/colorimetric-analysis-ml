@@ -1,0 +1,48 @@
+graph TB
+    Start([เริ่มต้น]) --> SelectProfile[เลือก Profile สาร<br/>Phosphate/Nitrate/Ammonia]
+    SelectProfile --> Choice{เลือกโหมด}
+    
+    Choice -->|รวบรวมข้อมูล| Collect[📊 รวบรวมข้อมูล]
+    Choice -->|เทรนโมเดล| Train[🤖 เทรนโมเดล]
+    Choice -->|ทำนายผล| Predict[🔮 ทำนายผล]
+    
+    Collect --> Upload1[อัปโหลดรูปภาพ]
+    Upload1 --> SetROI1[ตั้งค่า ROI<br/>ขนาดและตำแหน่ง]
+    SetROI1 --> ExtractRGB1[คำนวณค่า RGB เฉลี่ย<br/>จากพื้นที่ ROI]
+    ExtractRGB1 --> InputConc[กรอกค่าความเข้มข้นจริง]
+    InputConc --> SaveData[บันทึกลง CSV<br/>profile_dataset.csv]
+    SaveData --> MoreData{รวบรวมข้อมูล<br/>เพิ่มเติม?}
+    MoreData -->|ใช่| Upload1
+    MoreData -->|ไม่| End1([จบ])
+    
+    Train --> CheckData{มีข้อมูล<br/>≥ 5 ตัวอย่าง?}
+    CheckData -->|ไม่| Error1[แจ้งเตือน:<br/>ข้อมูลไม่เพียงพอ]
+    Error1 --> End2([จบ])
+    CheckData -->|ใช่| LoadData[โหลดข้อมูลจาก CSV]
+    LoadData --> PrepareData[แยก Features X, Y<br/>X = R,G,B<br/>Y = Concentration]
+    PrepareData --> TrainModel[เทรน Random Forest<br/>Regressor Model]
+    TrainModel --> CalcR2[คำนวณ R² Score]
+    CalcR2 --> SaveModel[บันทึก Model<br/>profile_model.joblib]
+    SaveModel --> ShowResult[แสดงผล R² Score<br/>และความแม่นยำ]
+    ShowResult --> End3([จบ])
+    
+    Predict --> CheckModel{มี Model<br/>ที่เทรนแล้ว?}
+    CheckModel -->|ไม่| Error2[แจ้งเตือน:<br/>กรุณาเทรนโมเดลก่อน]
+    Error2 --> End4([จบ])
+    CheckModel -->|ใช่| Upload2[อัปโหลดรูปภาพใหม่]
+    Upload2 --> SetROI2[ตั้งค่า ROI<br/>ขนาดและตำแหน่ง]
+    SetROI2 --> ExtractRGB2[คำนวณค่า RGB เฉลี่ย<br/>จากพื้นที่ ROI]
+    ExtractRGB2 --> LoadModel[โหลด Model]
+    LoadModel --> PredictConc[ทำนายค่าความเข้มข้น<br/>จาก RGB]
+    PredictConc --> ShowPrediction[แสดงผลการทำนาย<br/>พร้อมหน่วย]
+    ShowPrediction --> End5([จบ])
+    
+    style Start fill:#90EE90
+    style End1 fill:#FFB6C1
+    style End2 fill:#FFB6C1
+    style End3 fill:#FFB6C1
+    style End4 fill:#FFB6C1
+    style End5 fill:#FFB6C1
+    style Collect fill:#87CEEB
+    style Train fill:#FFD700
+    style Predict fill:#DDA0DD
