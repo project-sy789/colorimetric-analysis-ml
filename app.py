@@ -1446,6 +1446,10 @@ def model_training_module():
                 # Train model with profile-specific files
                 model, r2_score = train_model(dataset_file, model_file)
                 
+                # Store in session state for later use
+                st.session_state['last_r2_score'] = r2_score
+                st.session_state['last_model_file'] = model_file
+                
                 # Display results
                 st.success("✅ เทรนโมเดลสำเร็จ!")
                 st.balloons()
@@ -1538,6 +1542,195 @@ def model_training_module():
             st.error(f"❌ {str(e)}")
         except Exception as e:
             st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+    
+    # Feature Importance and Hyperparameter Tuning (outside train button - always show if model exists)
+    if os.path.isfile(model_file):
+        st.divider()
+        
+        # Feature Importance
+        st.subheader("📊 Feature Importance (ความสำคัญของสี)")
+        st.write("แสดงว่าสีแต่ละช่อง (R, G, B) มีความสำคัญต่อการทำนายมากน้อยแค่ไหน")
+        
+        try:
+            # Load model
+            model = joblib.load(model_file)
+            
+            # Get feature importances from the model
+            importances = model.feature_importances_
+            features = ['Red', 'Green', 'Blue']
+            
+            # Create DataFrame for display
+            importance_df = pd.DataFrame({
+                'Color Channel': features,
+                'Importance': importances,
+                'Percentage': [f"{imp*100:.2f}%" for imp in importances]
+            }).sort_values('Importance', ascending=False)
+            
+            col_imp1, col_imp2 = st.columns([1, 2])
+            
+            with col_imp1:
+                st.dataframe(importance_df, hide_index=True, use_container_width=True)
+                
+                # Interpretation
+                most_important = importance_df.iloc[0]
+                st.info(f"💡 **{most_important['Color Channel']}** channel สำคัญที่สุด ({most_important['Percentage']})")
+            
+            with col_imp2:
+                # Create bar chart
+                fig_imp, ax_imp = plt.subplots(figsize=(8, 5))
+                colors_map = {'Red': 'red', 'Green': 'green', 'Blue': 'blue'}
+                bar_colors = [colors_map[f] for f in features]
+                
+                bars = ax_imp.bar(features, importances, color=bar_colors, alpha=0.7, edgecolor='black')
+                ax_imp.set_ylabel('Importance Score', fontsize=12)
+                ax_imp.set_xlabel('Color Channel', fontsize=12)
+                ax_imp.set_title('Feature Importance in Colorimetric Analysis', fontsize=14, fontweight='bold')
+                ax_imp.set_ylim(0, max(importances) * 1.2)
+                ax_imp.grid(axis='y', alpha=0.3)
+                
+                # Add value labels on bars
+                for bar, imp in zip(bars, importances):
+                    height = bar.get_height()
+                    ax_imp.text(bar.get_x() + bar.get_width()/2., height,
+                              f'{imp:.3f}\n({imp*100:.1f}%)',
+                              ha='center', va='bottom', fontsize=10, fontweight='bold')
+                
+                st.pyplot(fig_imp)
+                plt.close(fig_imp)
+            
+            st.success("✅ Feature Importance แสดงว่าสีช่องไหนมีผลต่อการทำนายมากที่สุด")
+            
+        except Exception as e:
+            st.warning(f"⚠️ ไม่สามารถแสดง Feature Importance ได้: {str(e)}")
+        
+        st.divider()
+        
+        # Hyperparameter Tuning
+        st.subheader("🎛️ Hyperparameter Tuning (ปรับแต่งโมเดลอัตโนมัติ)")
+        st.write("หาค่าพารามิเตอร์ที่ดีที่สุดสำหรับโมเดล เพื่อเพิ่มความแม่นยำ")
+        
+        with st.expander("ℹ️ Hyperparameter Tuning คืออะไร?", expanded=False):
+            st.write("""
+            **Hyperparameter Tuning** คือการหาค่าตั้งต่างๆ ของโมเดล ML ที่ทำให้ได้ผลลัพธ์ดีที่สุด
+            
+            **พารามิเตอร์ที่จะปรับ:**
+            - **n_estimators**: จำนวนต้นไม้ใน Random Forest (50, 100, 200)
+            - **max_depth**: ความลึกสูงสุดของต้นไม้ (10, 20, 30, ไม่จำกัด)
+            - **min_samples_split**: จำนวน samples ขั้นต่ำในการแยก node (2, 5, 10)
+            
+            **วิธีทำงาน:**
+            1. ระบบจะทดลองค่าพารามิเตอร์ทุกชุด (รวม 36 combinations)
+            2. ใช้ Cross-Validation 5 folds เพื่อประเมินแต่ละชุด
+            3. เลือกชุดที่ให้ R² score สูงที่สุด
+            4. บันทึกโมเดลที่ดีที่สุด
+            
+            **ใช้เวลา:** ประมาณ 1-2 นาที (ขึ้นอยู่กับจำนวนข้อมูล)
+            """)
+        
+        col_tune1, col_tune2 = st.columns([2, 1])
+        
+        with col_tune1:
+            st.info("💡 Hyperparameter Tuning จะหาค่าที่ดีที่สุดให้อัตโนมัติ คุณไม่ต้องตั้งค่าเอง")
+        
+        with col_tune2:
+            tune_button = st.button("🚀 เริ่ม Tuning", type="primary", use_container_width=True)
+        
+        if tune_button:
+            try:
+                from sklearn.model_selection import GridSearchCV
+                
+                with st.spinner("🔄 กำลังทดลองค่าพารามิเตอร์ต่างๆ... (ใช้เวลา 1-2 นาที)"):
+                    # Load data
+                    df_tune = pd.read_csv(dataset_file)
+                    X = df_tune[['R', 'G', 'B']].values
+                    y = df_tune['Concentration'].values
+                    
+                    # Define parameter grid
+                    param_grid = {
+                        'n_estimators': [50, 100, 200],
+                        'max_depth': [10, 20, 30, None],
+                        'min_samples_split': [2, 5, 10]
+                    }
+                    
+                    # Lazy import RandomForestRegressor
+                    from sklearn.ensemble import RandomForestRegressor
+                    
+                    # Create GridSearchCV
+                    grid_search = GridSearchCV(
+                        RandomForestRegressor(random_state=42),
+                        param_grid,
+                        cv=5,
+                        scoring='r2',
+                        n_jobs=-1,
+                        verbose=0
+                    )
+                    
+                    # Fit
+                    grid_search.fit(X, y)
+                    
+                    # Get best model
+                    best_model = grid_search.best_estimator_
+                    best_params = grid_search.best_params_
+                    best_score = grid_search.best_score_
+                    
+                    # Save best model with different filename
+                    tuned_model_file = model_file.replace('.joblib', '_tuned.joblib')
+                    joblib.dump(best_model, tuned_model_file)
+                    
+                    # Store in session state
+                    st.session_state['last_tuning_score'] = best_score
+                    st.session_state['last_tuning_params'] = best_params
+                    st.session_state['tuned_model_file'] = tuned_model_file
+                
+                st.success("✅ Hyperparameter Tuning เสร็จสมบูรณ์!")
+                st.balloons()
+                
+                # Display results
+                col_result1, col_result2 = st.columns(2)
+                
+                with col_result1:
+                    st.write("**ค่าพารามิเตอร์ที่ดีที่สุด:**")
+                    st.json(best_params)
+                
+                with col_result2:
+                    st.metric("R² Score (หลัง Tuning)", f"{best_score:.4f}")
+                    
+                    # Compare with original (if available)
+                    if 'last_r2_score' in st.session_state:
+                        original_r2 = st.session_state['last_r2_score']
+                        improvement = best_score - original_r2
+                        if improvement > 0:
+                            st.metric("การปรับปรุง", f"+{improvement:.4f}", delta=f"+{improvement*100:.2f}%")
+                        else:
+                            st.info("โมเดลเดิมดีอยู่แล้ว")
+                    else:
+                        st.info("ไม่มีข้อมูลโมเดลเดิมเพื่อเปรียบเทียบ")
+                
+                st.success(f"💾 โมเดลหลัง Tuning ถูกบันทึกเป็น '{tuned_model_file}' แล้ว")
+                st.info(f"📝 โมเดลเดิม '{model_file}' ยังคงอยู่ คุณสามารถเลือกใช้ได้ในแท็บ 'ทำนายผล'")
+                
+                # Interpretation
+                if best_score >= 0.95:
+                    st.success("🎯 โมเดลหลัง Tuning มีความแม่นยำสูงมาก!")
+                elif best_score >= 0.85:
+                    st.info("👍 โมเดลหลัง Tuning มีความแม่นยำดี")
+                else:
+                    st.warning("⚠️ ควรรวบรวมข้อมูลเพิ่มเติมเพื่อเพิ่มความแม่นยำ")
+                
+            except Exception as e:
+                st.error(f"❌ เกิดข้อผิดพลาดในการ Tuning: {str(e)}")
+        
+        # Show last tuning results if available
+        elif 'last_tuning_score' in st.session_state and 'last_tuning_params' in st.session_state:
+            st.info("📋 ผลลัพธ์ Tuning ล่าสุด:")
+            col_last1, col_last2 = st.columns(2)
+            
+            with col_last1:
+                st.write("**ค่าพารามิเตอร์ที่ดีที่สุด:**")
+                st.json(st.session_state['last_tuning_params'])
+            
+            with col_last2:
+                st.metric("R² Score (หลัง Tuning)", f"{st.session_state['last_tuning_score']:.4f}")
 
 
 def load_model(model_file='model.joblib'):
@@ -1629,6 +1822,52 @@ def prediction_module():
     profile_name = st.session_state.get('current_profile', 'Default')
     
     st.write(f"อัปโหลดรูปภาพใหม่เพื่อทำนายค่าความเข้มข้นของ **{profile_name}**")
+    
+    # Model selection
+    st.subheader("🤖 เลือกโมเดล")
+    
+    # Check available models
+    tuned_model_file = model_file.replace('.joblib', '_tuned.joblib')
+    available_models = []
+    
+    if os.path.isfile(model_file):
+        available_models.append(("โมเดลปกติ", model_file))
+    
+    if os.path.isfile(tuned_model_file):
+        available_models.append(("โมเดลหลัง Tuning", tuned_model_file))
+    
+    if len(available_models) == 0:
+        st.error("❌ ไม่พบโมเดล กรุณาเทรนโมเดลก่อน")
+        st.info("👉 ไปที่แท็บ 'เทรนโมเดล' เพื่อเทรนโมเดล")
+        return
+    elif len(available_models) == 1:
+        selected_model_name, selected_model_file = available_models[0]
+        st.info(f"📊 ใช้โมเดล: **{selected_model_name}** ({selected_model_file})")
+    else:
+        # Show model selection
+        col_model1, col_model2 = st.columns(2)
+        
+        with col_model1:
+            model_choice = st.radio(
+                "เลือกโมเดลที่ต้องการใช้:",
+                options=[name for name, _ in available_models],
+                help="เลือกระหว่างโมเดลปกติหรือโมเดลหลัง Hyperparameter Tuning"
+            )
+        
+        with col_model2:
+            # Show model info
+            if model_choice == "โมเดลปกติ":
+                selected_model_file = model_file
+                if 'last_r2_score' in st.session_state:
+                    st.metric("R² Score", f"{st.session_state['last_r2_score']:.4f}")
+                st.info("💡 โมเดลจากการเทรนปกติ")
+            else:
+                selected_model_file = tuned_model_file
+                if 'last_tuning_score' in st.session_state:
+                    st.metric("R² Score (CV)", f"{st.session_state['last_tuning_score']:.4f}")
+                st.info("💡 โมเดลหลัง Hyperparameter Tuning (แนะนำ)")
+    
+    st.divider()
     
     # ROI configuration
     st.subheader("⚙️ ตั้งค่า ROI (Region of Interest)")
@@ -1799,8 +2038,8 @@ def prediction_module():
                 st.subheader("ผลการทำนาย")
                 
                 try:
-                    # Load model for current profile
-                    model = load_model(model_file)
+                    # Load selected model
+                    model = load_model(selected_model_file)
                     
                     # Reset file pointer for OpenCV processing
                     st.session_state.predict_uploaded_image.seek(0)
