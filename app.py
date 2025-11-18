@@ -22,6 +22,8 @@ import joblib
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import r2_score
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+import plotly.express as px
 import os
 
 
@@ -135,6 +137,77 @@ def draw_roi_on_image(image_array, roi_size=100, x_offset=0, y_offset=0):
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     
     return img_rgb
+
+
+def create_interactive_roi_selector(image_array, roi_size=100, current_x=0, current_y=0):
+    """
+    Create an interactive ROI selector using Plotly.
+    
+    Args:
+        image_array: NumPy array of the image (RGB format)
+        roi_size: Size of the ROI square
+        current_x: Current X offset
+        current_y: Current Y offset
+    
+    Returns:
+        Plotly figure object with interactive ROI selection
+    """
+    height, width = image_array.shape[:2]
+    center_y = height // 2
+    center_x = width // 2
+    
+    # Calculate ROI position
+    roi_center_x = center_x + current_x
+    roi_center_y = center_y + current_y
+    half_roi = roi_size // 2
+    
+    # Calculate ROI boundaries
+    y_start = max(0, roi_center_y - half_roi)
+    y_end = min(height, roi_center_y + half_roi)
+    x_start = max(0, roi_center_x - half_roi)
+    x_end = min(width, roi_center_x + half_roi)
+    
+    # Create Plotly figure
+    fig = go.Figure()
+    
+    # Add image
+    fig.add_trace(go.Image(z=image_array))
+    
+    # Add ROI rectangle
+    fig.add_shape(
+        type="rect",
+        x0=x_start, y0=y_start,
+        x1=x_end, y1=y_end,
+        line=dict(color="lime", width=3),
+        name="ROI"
+    )
+    
+    # Add center crosshair
+    fig.add_shape(
+        type="line",
+        x0=roi_center_x - 10, y0=roi_center_y,
+        x1=roi_center_x + 10, y1=roi_center_y,
+        line=dict(color="red", width=2)
+    )
+    fig.add_shape(
+        type="line",
+        x0=roi_center_x, y0=roi_center_y - 10,
+        x1=roi_center_x, y1=roi_center_y + 10,
+        line=dict(color="red", width=2)
+    )
+    
+    # Update layout
+    fig.update_layout(
+        title=f"คลิกบนภาพเพื่อเลือกตำแหน่ง ROI (ขนาด: {roi_size}x{roi_size}px)",
+        xaxis=dict(showgrid=False, zeroline=False, visible=False),
+        yaxis=dict(showgrid=False, zeroline=False, visible=False, scaleanchor="x"),
+        width=width if width < 800 else 800,
+        height=int((height / width * 800)) if width < 800 else int((height / width * 800)),
+        margin=dict(l=0, r=0, t=40, b=0),
+        hovermode='closest'
+    )
+    
+    return fig
 
 
 def extract_rgb_from_image(image_file, roi_size=100, x_offset=0, y_offset=0):
@@ -516,7 +589,7 @@ def data_collection_module():
     with col_roi2:
         roi_position = st.selectbox(
             "ตำแหน่ง ROI",
-            ["กลางภาพ (Center)", "กำหนดเอง (Custom)"],
+            ["กลางภาพ (Center)", "กำหนดเอง (Custom)", "คลิกเลือก (Interactive)"],
             help="เลือกตำแหน่งของ ROI บนภาพ"
         )
     
@@ -620,16 +693,54 @@ def data_collection_module():
                 # Convert PIL image to numpy array for ROI drawing
                 image_array = np.array(image)
                 
-                # Draw ROI rectangle on image
-                image_with_roi = draw_roi_on_image(
-                    image_array, 
-                    roi_size=roi_size,
-                    x_offset=roi_x_offset,
-                    y_offset=roi_y_offset
-                )
-                
-                # Display image with ROI
-                st.image(image_with_roi, use_container_width=True, caption="กรอบสีเขียว = พื้นที่ ROI ที่ใช้วิเคราะห์")
+                # Interactive ROI selection mode
+                if roi_position == "คลิกเลือก (Interactive)":
+                    # Initialize session state for interactive selection
+                    if 'interactive_x' not in st.session_state:
+                        st.session_state.interactive_x = 0
+                    if 'interactive_y' not in st.session_state:
+                        st.session_state.interactive_y = 0
+                    
+                    # Create interactive Plotly figure
+                    fig = create_interactive_roi_selector(
+                        image_array,
+                        roi_size=roi_size,
+                        current_x=st.session_state.interactive_x,
+                        current_y=st.session_state.interactive_y
+                    )
+                    
+                    # Display interactive figure
+                    selected_points = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="roi_selector")
+                    
+                    # Handle click events
+                    if selected_points and 'selection' in selected_points:
+                        if 'points' in selected_points['selection'] and len(selected_points['selection']['points']) > 0:
+                            point = selected_points['selection']['points'][0]
+                            if 'x' in point and 'y' in point:
+                                # Calculate offset from center
+                                height, width = image_array.shape[:2]
+                                center_x = width // 2
+                                center_y = height // 2
+                                st.session_state.interactive_x = int(point['x'] - center_x)
+                                st.session_state.interactive_y = int(point['y'] - center_y)
+                                st.rerun()
+                    
+                    # Use interactive offsets
+                    roi_x_offset = st.session_state.interactive_x
+                    roi_y_offset = st.session_state.interactive_y
+                    
+                    st.info(f"📍 ตำแหน่ง: X={roi_x_offset:+d}, Y={roi_y_offset:+d} จากจุดกลาง")
+                else:
+                    # Draw ROI rectangle on image (non-interactive mode)
+                    image_with_roi = draw_roi_on_image(
+                        image_array, 
+                        roi_size=roi_size,
+                        x_offset=roi_x_offset,
+                        y_offset=roi_y_offset
+                    )
+                    
+                    # Display image with ROI
+                    st.image(image_with_roi, use_container_width=True, caption="กรอบสีเขียว = พื้นที่ ROI ที่ใช้วิเคราะห์")
             
             with col2:
                 st.subheader("ผลการวิเคราะห์")
@@ -1286,7 +1397,7 @@ def prediction_module():
     with col_roi2:
         roi_position = st.selectbox(
             "ตำแหน่ง ROI",
-            ["กลางภาพ (Center)", "กำหนดเอง (Custom)"],
+            ["กลางภาพ (Center)", "กำหนดเอง (Custom)", "คลิกเลือก (Interactive)"],
             help="เลือกตำแหน่งของ ROI บนภาพ",
             key="predict_roi_position"
         )
@@ -1393,16 +1504,54 @@ def prediction_module():
                 # Convert PIL image to numpy array for ROI drawing
                 image_array = np.array(image)
                 
-                # Draw ROI rectangle on image
-                image_with_roi = draw_roi_on_image(
-                    image_array, 
-                    roi_size=roi_size,
-                    x_offset=roi_x_offset,
-                    y_offset=roi_y_offset
-                )
-                
-                # Display image with ROI
-                st.image(image_with_roi, use_container_width=True, caption="กรอบสีเขียว = พื้นที่ ROI ที่ใช้วิเคราะห์")
+                # Interactive ROI selection mode
+                if roi_position == "คลิกเลือก (Interactive)":
+                    # Initialize session state for interactive selection
+                    if 'predict_interactive_x' not in st.session_state:
+                        st.session_state.predict_interactive_x = 0
+                    if 'predict_interactive_y' not in st.session_state:
+                        st.session_state.predict_interactive_y = 0
+                    
+                    # Create interactive Plotly figure
+                    fig = create_interactive_roi_selector(
+                        image_array,
+                        roi_size=roi_size,
+                        current_x=st.session_state.predict_interactive_x,
+                        current_y=st.session_state.predict_interactive_y
+                    )
+                    
+                    # Display interactive figure
+                    selected_points = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="predict_roi_selector")
+                    
+                    # Handle click events
+                    if selected_points and 'selection' in selected_points:
+                        if 'points' in selected_points['selection'] and len(selected_points['selection']['points']) > 0:
+                            point = selected_points['selection']['points'][0]
+                            if 'x' in point and 'y' in point:
+                                # Calculate offset from center
+                                height, width = image_array.shape[:2]
+                                center_x = width // 2
+                                center_y = height // 2
+                                st.session_state.predict_interactive_x = int(point['x'] - center_x)
+                                st.session_state.predict_interactive_y = int(point['y'] - center_y)
+                                st.rerun()
+                    
+                    # Use interactive offsets
+                    roi_x_offset = st.session_state.predict_interactive_x
+                    roi_y_offset = st.session_state.predict_interactive_y
+                    
+                    st.info(f"📍 ตำแหน่ง: X={roi_x_offset:+d}, Y={roi_y_offset:+d} จากจุดกลาง")
+                else:
+                    # Draw ROI rectangle on image (non-interactive mode)
+                    image_with_roi = draw_roi_on_image(
+                        image_array, 
+                        roi_size=roi_size,
+                        x_offset=roi_x_offset,
+                        y_offset=roi_y_offset
+                    )
+                    
+                    # Display image with ROI
+                    st.image(image_with_roi, use_container_width=True, caption="กรอบสีเขียว = พื้นที่ ROI ที่ใช้วิเคราะห์")
             
             with col2:
                 st.subheader("ผลการทำนาย")

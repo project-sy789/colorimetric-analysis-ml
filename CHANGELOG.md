@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Multi-profile support for different substances (Phosphate, Nitrate, Ammonia)
 - ROI (Region of Interest) adjustment with manual size and position control
 - Quick Position buttons for easy ROI movement
+- Interactive ROI selection with Plotly (click to select position on image)
 - Real-time ROI visualization on images
 - Machine Learning model training using Random Forest Regressor
 - Calibration Curve plotting with R² score
