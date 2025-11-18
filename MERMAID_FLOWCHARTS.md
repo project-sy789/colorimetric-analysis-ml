@@ -295,3 +295,130 @@ flowchart TB
 ---
 
 **หมายเหตุ**: Flow Charts เหล่านี้ออกแบบมาเพื่อความชัดเจนและเหมาะสมกับการนำเสนอระดับมัธยมศึกษาตอนปลาย
+
+
+---
+
+## 🆕 Flow Chart 5: Machine Learning with Feature Importance & Hyperparameter Tuning
+
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#FFD700','primaryTextColor':'#000','primaryBorderColor':'#000','lineColor':'#000'}}}%%
+flowchart TB
+    Start([🤖 เริ่มเทรนโมเดล]) --> LoadCSV[📂 โหลดข้อมูล<br/>profile_dataset.csv]
+    LoadCSV --> ValidateData{ตรวจสอบข้อมูล}
+    ValidateData -->|ผ่าน| SplitData[🔧 แยกข้อมูล<br/>X = R,G,B<br/>Y = Concentration]
+    ValidateData -->|ไม่ผ่าน| Error[❌ Error]
+    Error --> End1([🔴 จบ])
+    
+    SplitData --> TrainNormal[🎓 เทรนโมเดลปกติ<br/>Random Forest<br/>n_estimators=100]
+    TrainNormal --> CalcR2Normal[📊 คำนวณ R² Score]
+    CalcR2Normal --> SaveNormal[💾 บันทึก<br/>profile_model.joblib]
+    
+    SaveNormal --> FeatureImp[🎯 คำนวณ Feature Importance<br/>ความสำคัญของ R, G, B]
+    FeatureImp --> ShowFeatureImp[📊 แสดงตารางและกราฟ<br/>R: 45.2%<br/>G: 32.8%<br/>B: 22.0%]
+    
+    ShowFeatureImp --> CalcLOD[🔬 คำนวณ LOD]
+    CalcLOD --> PlotCurve[📈 สร้าง Calibration Curve]
+    PlotCurve --> ShowNormalResult[📊 แสดงผลโมเดลปกติ<br/>R² Score, LOD, Curve]
+    
+    ShowNormalResult --> AskTuning{ต้องการ<br/>Hyperparameter Tuning?}
+    AskTuning -->|ไม่| End2([✅ จบ - ใช้โมเดลปกติ])
+    AskTuning -->|ใช่| GridSearch[🔧 GridSearchCV<br/>ทดสอบพารามิเตอร์หลายชุด<br/>5-fold cross-validation]
+    
+    GridSearch --> TestParams[🧪 ทดสอบ<br/>n_estimators: 50-200<br/>max_depth: None-30<br/>min_samples_split: 2-10]
+    TestParams --> FindBest[🎯 หาพารามิเตอร์ที่ดีที่สุด]
+    FindBest --> TrainTuned[🎓 เทรนโมเดล Tuned<br/>ด้วย Best Parameters]
+    
+    TrainTuned --> CalcR2Tuned[📊 คำนวณ R² Score<br/>ของโมเดล Tuned]
+    CalcR2Tuned --> SaveTuned[💾 บันทึก<br/>profile_model_tuned.joblib]
+    SaveTuned --> Compare[📊 เปรียบเทียบ<br/>โมเดลปกติ vs Tuned]
+    
+    Compare --> ShowComparison[📈 แสดงผล<br/>Normal: R²=98.56%<br/>Tuned: R²=99.12%<br/>Improvement: +0.56%]
+    ShowComparison --> ShowBestParams[🎯 แสดง Best Parameters<br/>n_estimators: 200<br/>max_depth: 20<br/>min_samples_split: 2]
+    ShowBestParams --> End3([✅ จบ - มีทั้ง 2 โมเดล])
+    
+    %% Styling
+    classDef startStyle fill:#90EE90,stroke:#000,stroke-width:3px,color:#000
+    classDef endStyle fill:#FFB6C1,stroke:#000,stroke-width:3px,color:#000
+    classDef processStyle fill:#FFD700,stroke:#000,stroke-width:2px,color:#000
+    classDef featureStyle fill:#87CEEB,stroke:#000,stroke-width:2px,color:#000
+    classDef tuningStyle fill:#DDA0DD,stroke:#000,stroke-width:2px,color:#000
+    classDef errorStyle fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff
+    
+    class Start startStyle
+    class End1,End2,End3 endStyle
+    class TrainNormal,CalcR2Normal,SaveNormal,CalcLOD,PlotCurve,ShowNormalResult processStyle
+    class FeatureImp,ShowFeatureImp featureStyle
+    class GridSearch,TestParams,FindBest,TrainTuned,CalcR2Tuned,SaveTuned,Compare,ShowComparison,ShowBestParams tuningStyle
+    class Error errorStyle
+
+---
+
+## 🆕 Flow Chart 6: Prediction with Model Selection
+
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#DDA0DD','primaryTextColor':'#000','primaryBorderColor':'#000','lineColor':'#000'}}}%%
+flowchart TB
+    Start([🔮 เริ่มทำนาย]) --> CheckModels{ตรวจสอบโมเดล}
+    CheckModels -->|ไม่มี| Error[❌ กรุณาเทรนโมเดลก่อน]
+    Error --> End1([🔴 จบ])
+    CheckModels -->|มี| Upload[📤 อัปโหลดภาพ]
+    
+    Upload --> SetROI[⚙️ ตั้งค่า ROI]
+    SetROI --> ExtractRGB[🎨 คำนวณ RGB]
+    ExtractRGB --> ShowRGB[📊 แสดง R, G, B]
+    
+    ShowRGB --> SelectModel{เลือกโมเดล}
+    SelectModel -->|โมเดลปกติ| LoadNormal[📂 โหลด<br/>profile_model.joblib]
+    SelectModel -->|โมเดล Tuned| CheckTuned{มีโมเดล<br/>Tuned?}
+    
+    CheckTuned -->|ไม่มี| Warning[⚠️ ยังไม่ได้ Tuning<br/>ใช้โมเดลปกติแทน]
+    Warning --> LoadNormal
+    CheckTuned -->|มี| LoadTuned[📂 โหลด<br/>profile_model_tuned.joblib]
+    
+    LoadNormal --> PredictNormal[🔮 ทำนาย<br/>ด้วยโมเดลปกติ]
+    LoadTuned --> PredictTuned[🔮 ทำนาย<br/>ด้วยโมเดล Tuned]
+    
+    PredictNormal --> ShowResultNormal[🎯 แสดงผล<br/>ความเข้มข้น<br/>โมเดล: ปกติ<br/>R²: 98.56%]
+    PredictTuned --> ShowResultTuned[🎯 แสดงผล<br/>ความเข้มข้น<br/>โมเดล: Tuned<br/>R²: 99.12%]
+    
+    ShowResultNormal --> More{ทำนายต่อ?}
+    ShowResultTuned --> More
+    More -->|ใช่| Upload
+    More -->|ไม่| End2([✅ จบ])
+    
+    %% Styling
+    classDef startStyle fill:#90EE90,stroke:#000,stroke-width:3px,color:#000
+    classDef endStyle fill:#FFB6C1,stroke:#000,stroke-width:3px,color:#000
+    classDef processStyle fill:#87CEEB,stroke:#000,stroke-width:2px,color:#000
+    classDef normalStyle fill:#FFD700,stroke:#000,stroke-width:2px,color:#000
+    classDef tunedStyle fill:#DDA0DD,stroke:#000,stroke-width:2px,color:#000
+    classDef errorStyle fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff
+    
+    class Start startStyle
+    class End1,End2 endStyle
+    class Upload,SetROI,ExtractRGB,ShowRGB processStyle
+    class LoadNormal,PredictNormal,ShowResultNormal normalStyle
+    class LoadTuned,PredictTuned,ShowResultTuned tunedStyle
+    class Error,Warning errorStyle
+
+---
+
+## 📝 หมายเหตุสำหรับ Flow Charts ใหม่
+
+### Flow Chart 5: Machine Learning with Feature Importance & Hyperparameter Tuning
+- แสดงขั้นตอนการเทรนโมเดลแบบสมบูรณ์
+- รวม Feature Importance Analysis
+- รวม Hyperparameter Tuning ด้วย GridSearchCV
+- เปรียบเทียบโมเดลปกติกับโมเดล Tuned
+
+### Flow Chart 6: Prediction with Model Selection
+- แสดงการเลือกโมเดลในการทำนาย
+- รองรับทั้งโมเดลปกติและโมเดล Tuned
+- แสดง R² Score ของแต่ละโมเดล
+- จัดการกรณีที่ยังไม่มีโมเดล Tuned
+
+### การใช้งาน:
+1. Flow Chart 5 ใช้แทน Flow Chart 3 เดิม (เพิ่มฟีเจอร์ใหม่)
+2. Flow Chart 6 ใช้เสริม Flow Chart 1 ในส่วน Prediction
+3. Flow Chart 1-4 เดิมยังใช้ได้ แต่ไม่มีฟีเจอร์ใหม่
+
+**แนะนำ:** ใช้ Flow Chart 5 และ 6 สำหรับการนำเสนอที่ต้องการแสดงฟีเจอร์ใหม่ทั้งหมด
