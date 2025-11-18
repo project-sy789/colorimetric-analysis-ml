@@ -13,18 +13,19 @@ Author: Colorimetric Analysis Team
 Version: 1.0.0
 """
 
+import os
+os.environ['MPLBACKEND'] = 'Agg'  # Set matplotlib backend via environment variable
+
 import streamlit as st
 import pandas as pd
 import cv2
 import numpy as np
 from PIL import Image
 import joblib
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import r2_score
+# Lazy import sklearn to avoid hanging on macOS
+# from sklearn.ensemble import RandomForestRegressor
+# import sklearn.metrics
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
-import plotly.express as px
-import os
 
 
 def get_profile_files():
@@ -139,75 +140,330 @@ def draw_roi_on_image(image_array, roi_size=100, x_offset=0, y_offset=0):
     return img_rgb
 
 
-def create_interactive_roi_selector(image_array, roi_size=100, current_x=0, current_y=0):
+def create_interactive_roi_image(image_array, roi_size=100, current_x=0, current_y=0):
     """
-    Create an interactive ROI selector using Plotly.
+    Create an image with ROI rectangle and crosshair drawn on it for interactive selection.
+    
+    This function prepares an image for interactive ROI selection by drawing:
+    - A green rectangle showing the ROI boundaries
+    - A red crosshair at the ROI center
+    - Position information text
     
     Args:
         image_array: NumPy array of the image (RGB format)
-        roi_size: Size of the ROI square
-        current_x: Current X offset
-        current_y: Current Y offset
+        roi_size (int): Size of the square ROI in pixels
+        current_x (int): Current X offset from center in pixels
+        current_y (int): Current Y offset from center in pixels
     
     Returns:
-        Plotly figure object with interactive ROI selection
+        numpy.ndarray: Image with ROI rectangle and crosshair drawn (RGB format)
     """
-    height, width = image_array.shape[:2]
+    # Create a copy to avoid modifying the original
+    img_annotated = image_array.copy()
+    
+    # Get image dimensions
+    height, width = img_annotated.shape[:2]
+    
+    # Calculate ROI center position
     center_y = height // 2
     center_x = width // 2
-    
-    # Calculate ROI position
     roi_center_x = center_x + current_x
     roi_center_y = center_y + current_y
+    
+    # Calculate half of ROI size
     half_roi = roi_size // 2
     
-    # Calculate ROI boundaries
+    # Calculate ROI boundaries (clamped to image bounds)
     y_start = max(0, roi_center_y - half_roi)
     y_end = min(height, roi_center_y + half_roi)
     x_start = max(0, roi_center_x - half_roi)
     x_end = min(width, roi_center_x + half_roi)
     
-    # Create Plotly figure
-    fig = go.Figure()
+    # Convert RGB to BGR for OpenCV drawing
+    img_bgr = cv2.cvtColor(img_annotated, cv2.COLOR_RGB2BGR)
     
-    # Add image
-    fig.add_trace(go.Image(z=image_array))
+    # Draw ROI rectangle
+    # Draw outer rectangle (white) for better visibility
+    cv2.rectangle(img_bgr, (x_start, y_start), (x_end, y_end), (255, 255, 255), 3)
+    # Draw inner rectangle (green)
+    cv2.rectangle(img_bgr, (x_start, y_start), (x_end, y_end), (0, 255, 0), 2)
     
-    # Add ROI rectangle
-    fig.add_shape(
-        type="rect",
-        x0=x_start, y0=y_start,
-        x1=x_end, y1=y_end,
-        line=dict(color="lime", width=3),
-        name="ROI"
+    # Draw crosshair at ROI center
+    crosshair_size = 15
+    # Horizontal line (red)
+    cv2.line(img_bgr, 
+             (roi_center_x - crosshair_size, roi_center_y), 
+             (roi_center_x + crosshair_size, roi_center_y), 
+             (0, 0, 255), 2)
+    # Vertical line (red)
+    cv2.line(img_bgr, 
+             (roi_center_x, roi_center_y - crosshair_size), 
+             (roi_center_x, roi_center_y + crosshair_size), 
+             (0, 0, 255), 2)
+    # Center dot (red)
+    cv2.circle(img_bgr, (roi_center_x, roi_center_y), 3, (0, 0, 255), -1)
+    
+    # Add position information text
+    position_text = f"ROI: {roi_size}x{roi_size}px | Offset: X={current_x:+d}, Y={current_y:+d}"
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    font_thickness = 2
+    
+    # Get text size for background
+    (text_width, text_height), baseline = cv2.getTextSize(position_text, font, font_scale, font_thickness)
+    
+    # Position text at top-left corner with padding
+    text_x = 10
+    text_y = 30
+    
+    # Draw text background (black with some transparency effect)
+    cv2.rectangle(img_bgr, 
+                  (text_x - 5, text_y - text_height - 5), 
+                  (text_x + text_width + 5, text_y + 5), 
+                  (0, 0, 0), -1)
+    
+    # Draw text (white)
+    cv2.putText(img_bgr, position_text, (text_x, text_y), 
+                font, font_scale, (255, 255, 255), font_thickness)
+    
+    # Convert back to RGB
+    img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+    
+    return img_rgb
+
+
+def manual_interactive_roi_selection(image_array, roi_size, session_key_prefix):
+    """
+    Manual interactive ROI selection using grid buttons and sliders.
+    
+    This is a fallback approach that provides better performance and compatibility
+    by avoiding complex interactive libraries. It uses a 3x3 grid of position buttons
+    for quick positioning and sliders for fine-tuning.
+    
+    Args:
+        image_array: NumPy array of the image (RGB format)
+        roi_size (int): Size of the square ROI in pixels
+        session_key_prefix (str): Prefix for session state keys (e.g., 'data_' or 'predict_')
+                                 This allows separate state for different modules
+    
+    Returns:
+        tuple: (x_offset, y_offset) - Current ROI position offsets from center
+    """
+    # Initialize session state variables for ROI position
+    x_key = f'{session_key_prefix}interactive_x'
+    y_key = f'{session_key_prefix}interactive_y'
+    
+    if x_key not in st.session_state:
+        st.session_state[x_key] = 0
+    if y_key not in st.session_state:
+        st.session_state[y_key] = 0
+    
+    # Get image dimensions
+    height, width = image_array.shape[:2]
+    
+    # Display instructions
+    st.info("💡 คลิกปุ่มตำแหน่งโดยประมาณ แล้วปรับละเอียดด้วย slider")
+    
+    # Create 3x3 grid of position buttons
+    st.write("**🎯 เลือกตำแหน่งโดยประมาณ:**")
+    
+    # Define positions for 3x3 grid
+    # Format: (label, x_offset, y_offset)
+    positions = [
+        ("↖️ บนซ้าย", -width//4, -height//4),
+        ("⬆️ บน", 0, -height//4),
+        ("↗️ บนขวา", width//4, -height//4),
+        ("⬅️ ซ้าย", -width//4, 0),
+        ("🎯 กลาง", 0, 0),
+        ("➡️ ขวา", width//4, 0),
+        ("↙️ ล่างซ้าย", -width//4, height//4),
+        ("⬇️ ล่าง", 0, height//4),
+        ("↘️ ล่างขวา", width//4, height//4),
+    ]
+    
+    # Create 3 rows of 3 columns each
+    for row in range(3):
+        cols = st.columns(3)
+        for col in range(3):
+            idx = row * 3 + col
+            label, x, y = positions[idx]
+            
+            with cols[col]:
+                if st.button(
+                    label, 
+                    key=f"{session_key_prefix}manual_pos_{idx}", 
+                    use_container_width=True,
+                    help=f"เลื่อน ROI ไปที่ตำแหน่ง {label}"
+                ):
+                    st.session_state[x_key] = x
+                    st.session_state[y_key] = y
+                    st.rerun()
+    
+    st.divider()
+    
+    # Fine-tune with sliders
+    st.write("**🎚️ ปรับละเอียด:**")
+    col_x, col_y = st.columns(2)
+    
+    with col_x:
+        x_offset = st.slider(
+            "แนวนอน (X)",
+            min_value=-width//2,
+            max_value=width//2,
+            value=st.session_state[x_key],
+            step=5,
+            key=f"{session_key_prefix}manual_slider_x",
+            help="เลื่อน ROI ไปทางซ้าย (-) หรือขวา (+)"
+        )
+        st.session_state[x_key] = x_offset
+    
+    with col_y:
+        y_offset = st.slider(
+            "แนวตั้ง (Y)",
+            min_value=-height//2,
+            max_value=height//2,
+            value=st.session_state[y_key],
+            step=5,
+            key=f"{session_key_prefix}manual_slider_y",
+            help="เลื่อน ROI ไปทางบน (-) หรือล่าง (+)"
+        )
+        st.session_state[y_key] = y_offset
+    
+    # Display image with ROI preview
+    img_with_roi = draw_roi_on_image(image_array, roi_size, x_offset, y_offset)
+    st.image(img_with_roi, use_container_width=True, caption="กรอบสีเขียว = พื้นที่ ROI")
+    
+    # Display current position information
+    st.caption(f"📍 ตำแหน่ง ROI ปัจจุบัน: X={x_offset:+d}, Y={y_offset:+d} จากจุดกลาง")
+    
+    # Return current offsets
+    return x_offset, y_offset
+
+
+def handle_interactive_roi_selection(image_array, roi_size, session_key_prefix):
+    """
+    Handle interactive ROI selection using streamlit-image-coordinates.
+    
+    This function manages the interactive ROI selection workflow:
+    1. Initialize session state variables for ROI position
+    2. Create an annotated image with ROI and crosshair
+    3. Display the image with click detection using streamlit-image-coordinates
+    4. Handle click events to update ROI position
+    5. Return current ROI offsets
+    
+    Args:
+        image_array: NumPy array of the image (RGB format)
+        roi_size (int): Size of the square ROI in pixels
+        session_key_prefix (str): Prefix for session state keys (e.g., 'data_' or 'predict_')
+                                 This allows separate state for different modules
+    
+    Returns:
+        tuple: (x_offset, y_offset) - Current ROI position offsets from center
+    
+    Raises:
+        ImportError: If streamlit-image-coordinates is not installed
+    """
+    # Try to import streamlit-image-coordinates
+    try:
+        from streamlit_image_coordinates import streamlit_image_coordinates
+    except ImportError:
+        raise ImportError(
+            "streamlit-image-coordinates is not installed. "
+            "Please install it with: pip install streamlit-image-coordinates"
+        )
+    
+    # Initialize session state variables for ROI position
+    x_key = f'{session_key_prefix}interactive_x'
+    y_key = f'{session_key_prefix}interactive_y'
+    
+    if x_key not in st.session_state:
+        st.session_state[x_key] = 0
+    if y_key not in st.session_state:
+        st.session_state[y_key] = 0
+    
+    # Get current offsets from session state
+    current_x = st.session_state[x_key]
+    current_y = st.session_state[y_key]
+    
+    # Create image with ROI and crosshair drawn
+    img_with_roi = create_interactive_roi_image(
+        image_array, 
+        roi_size=roi_size, 
+        current_x=current_x, 
+        current_y=current_y
     )
     
-    # Add center crosshair
-    fig.add_shape(
-        type="line",
-        x0=roi_center_x - 10, y0=roi_center_y,
-        x1=roi_center_x + 10, y1=roi_center_y,
-        line=dict(color="red", width=2)
-    )
-    fig.add_shape(
-        type="line",
-        x0=roi_center_x, y0=roi_center_y - 10,
-        x1=roi_center_x, y1=roi_center_y + 10,
-        line=dict(color="red", width=2)
+    # Display instructions
+    st.info("💡 คลิกบนภาพเพื่อเลือกตำแหน่ง ROI ใหม่")
+    
+    # Convert numpy array to PIL Image for streamlit_image_coordinates
+    from PIL import Image as PILImage
+    img_pil = PILImage.fromarray(img_with_roi)
+    
+    # Get image dimensions to calculate appropriate display width
+    img_height, img_width = image_array.shape[:2]
+    
+    # Calculate display width (max 600px for better performance)
+    max_display_width = 600
+    if img_width > max_display_width:
+        display_width = max_display_width
+        # Resize image for better performance
+        scale = max_display_width / img_width
+        new_height = int(img_height * scale)
+        img_pil = img_pil.resize((max_display_width, new_height), Image.Resampling.LANCZOS)
+    else:
+        display_width = img_width
+    
+    # Display image with click detection
+    # streamlit_image_coordinates returns click coordinates when user clicks
+    value = streamlit_image_coordinates(
+        img_pil,
+        width=display_width,
+        key=f"{session_key_prefix}roi_selector"
     )
     
-    # Update layout
-    fig.update_layout(
-        title=f"คลิกบนภาพเพื่อเลือกตำแหน่ง ROI (ขนาด: {roi_size}x{roi_size}px)",
-        xaxis=dict(showgrid=False, zeroline=False, visible=False),
-        yaxis=dict(showgrid=False, zeroline=False, visible=False, scaleanchor="x"),
-        width=width if width < 800 else 800,
-        height=int((height / width * 800)) if width < 800 else int((height / width * 800)),
-        margin=dict(l=0, r=0, t=40, b=0),
-        hovermode='closest'
-    )
+    # Handle click event
+    if value is not None and "x" in value and "y" in value:
+        # Extract clicked coordinates (these are in display coordinates)
+        clicked_x = value["x"]
+        clicked_y = value["y"]
+        
+        # Get original image dimensions
+        height, width = image_array.shape[:2]
+        
+        # Calculate scale factor (how much the image was scaled for display)
+        scale_factor = width / display_width
+        
+        # Convert clicked coordinates back to original image coordinates
+        original_clicked_x = int(clicked_x * scale_factor)
+        original_clicked_y = int(clicked_y * scale_factor)
+        
+        # Calculate image center
+        center_x = width // 2
+        center_y = height // 2
+        
+        # Calculate new offset from center (using original image coordinates)
+        # Offset is the distance from center to clicked position
+        new_x_offset = original_clicked_x - center_x
+        new_y_offset = original_clicked_y - center_y
+        
+        # Only update if position actually changed (to avoid rerun loop)
+        if current_x != new_x_offset or current_y != new_y_offset:
+            # Update session state with new position
+            st.session_state[x_key] = new_x_offset
+            st.session_state[y_key] = new_y_offset
+            
+            # Force rerun to update the ROI box on image (with minimal delay)
+            st.rerun()
+        else:
+            # Position hasn't changed, just show current position
+            st.info(f"📍 ROI อยู่ที่ตำแหน่งนี้แล้ว: X={current_x:+d}, Y={current_y:+d}")    
     
-    return fig
+    # Display current position information
+    st.caption(f"📍 ตำแหน่ง ROI ปัจจุบัน: X={current_x:+d}, Y={current_y:+d} จากจุดกลาง")
+    
+    # Return current offsets
+    return current_x, current_y
 
 
 def extract_rgb_from_image(image_file, roi_size=100, x_offset=0, y_offset=0):
@@ -695,41 +951,31 @@ def data_collection_module():
                 
                 # Interactive ROI selection mode
                 if roi_position == "คลิกเลือก (Interactive)":
-                    # Initialize session state for interactive selection
-                    if 'interactive_x' not in st.session_state:
-                        st.session_state.interactive_x = 0
-                    if 'interactive_y' not in st.session_state:
-                        st.session_state.interactive_y = 0
-                    
-                    # Create interactive Plotly figure
-                    fig = create_interactive_roi_selector(
-                        image_array,
-                        roi_size=roi_size,
-                        current_x=st.session_state.interactive_x,
-                        current_y=st.session_state.interactive_y
-                    )
-                    
-                    # Display interactive figure
-                    selected_points = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="roi_selector")
-                    
-                    # Handle click events
-                    if selected_points and 'selection' in selected_points:
-                        if 'points' in selected_points['selection'] and len(selected_points['selection']['points']) > 0:
-                            point = selected_points['selection']['points'][0]
-                            if 'x' in point and 'y' in point:
-                                # Calculate offset from center
-                                height, width = image_array.shape[:2]
-                                center_x = width // 2
-                                center_y = height // 2
-                                st.session_state.interactive_x = int(point['x'] - center_x)
-                                st.session_state.interactive_y = int(point['y'] - center_y)
-                                st.rerun()
-                    
-                    # Use interactive offsets
-                    roi_x_offset = st.session_state.interactive_x
-                    roi_y_offset = st.session_state.interactive_y
-                    
-                    st.info(f"📍 ตำแหน่ง: X={roi_x_offset:+d}, Y={roi_y_offset:+d} จากจุดกลาง")
+                    # Try to use streamlit-image-coordinates, fall back to manual if not available
+                    try:
+                        roi_x_offset, roi_y_offset = handle_interactive_roi_selection(
+                            image_array,
+                            roi_size=roi_size,
+                            session_key_prefix='data_'
+                        )
+                    except ImportError:
+                        # Fall back to manual interactive selection
+                        st.warning("⚠️ ไม่สามารถใช้โหมดคลิกเลือกอัตโนมัติได้ กำลังใช้โหมดเลือกด้วยตนเอง")
+                        st.info("💡 ติดตั้ง streamlit-image-coordinates เพื่อใช้โหมดคลิกเลือกอัตโนมัติ: `pip install streamlit-image-coordinates`")
+                        roi_x_offset, roi_y_offset = manual_interactive_roi_selection(
+                            image_array,
+                            roi_size=roi_size,
+                            session_key_prefix='data_'
+                        )
+                    except Exception as e:
+                        # Handle other errors
+                        st.error(f"❌ เกิดข้อผิดพลาดในโหมด Interactive: {str(e)}")
+                        st.info("💡 กำลังใช้โหมดเลือกด้วยตนเองแทน")
+                        roi_x_offset, roi_y_offset = manual_interactive_roi_selection(
+                            image_array,
+                            roi_size=roi_size,
+                            session_key_prefix='data_'
+                        )
                 else:
                     # Draw ROI rectangle on image (non-interactive mode)
                     image_with_roi = draw_roi_on_image(
@@ -919,6 +1165,9 @@ def train_model(dataset_file='dataset.csv', model_file='model.joblib'):
         X = df[['R', 'G', 'B']]
         y = df['Concentration']
         
+        # Lazy import sklearn to avoid hanging on macOS
+        from sklearn.ensemble import RandomForestRegressor
+        
         # Create and train RandomForestRegressor model
         model = RandomForestRegressor(n_estimators=100, random_state=42)
         model.fit(X, y)
@@ -1002,13 +1251,16 @@ def plot_calibration_curve(df, model, unit='mg/L'):
         matplotlib figure object
     """
     try:
+        # Lazy import sklearn to avoid hanging on macOS
+        import sklearn.metrics
+        
         # Prepare data
         X = df[['R', 'G', 'B']]
         y_actual = df['Concentration']
         y_predicted = model.predict(X)
         
         # Calculate R² score
-        r2 = r2_score(y_actual, y_predicted)
+        r2 = sklearn.metrics.r2_score(y_actual, y_predicted)
         
         # Create figure
         fig, ax = plt.subplots(figsize=(10, 6))
@@ -1506,41 +1758,31 @@ def prediction_module():
                 
                 # Interactive ROI selection mode
                 if roi_position == "คลิกเลือก (Interactive)":
-                    # Initialize session state for interactive selection
-                    if 'predict_interactive_x' not in st.session_state:
-                        st.session_state.predict_interactive_x = 0
-                    if 'predict_interactive_y' not in st.session_state:
-                        st.session_state.predict_interactive_y = 0
-                    
-                    # Create interactive Plotly figure
-                    fig = create_interactive_roi_selector(
-                        image_array,
-                        roi_size=roi_size,
-                        current_x=st.session_state.predict_interactive_x,
-                        current_y=st.session_state.predict_interactive_y
-                    )
-                    
-                    # Display interactive figure
-                    selected_points = st.plotly_chart(fig, use_container_width=True, on_select="rerun", key="predict_roi_selector")
-                    
-                    # Handle click events
-                    if selected_points and 'selection' in selected_points:
-                        if 'points' in selected_points['selection'] and len(selected_points['selection']['points']) > 0:
-                            point = selected_points['selection']['points'][0]
-                            if 'x' in point and 'y' in point:
-                                # Calculate offset from center
-                                height, width = image_array.shape[:2]
-                                center_x = width // 2
-                                center_y = height // 2
-                                st.session_state.predict_interactive_x = int(point['x'] - center_x)
-                                st.session_state.predict_interactive_y = int(point['y'] - center_y)
-                                st.rerun()
-                    
-                    # Use interactive offsets
-                    roi_x_offset = st.session_state.predict_interactive_x
-                    roi_y_offset = st.session_state.predict_interactive_y
-                    
-                    st.info(f"📍 ตำแหน่ง: X={roi_x_offset:+d}, Y={roi_y_offset:+d} จากจุดกลาง")
+                    # Try to use streamlit-image-coordinates, fall back to manual if not available
+                    try:
+                        roi_x_offset, roi_y_offset = handle_interactive_roi_selection(
+                            image_array,
+                            roi_size=roi_size,
+                            session_key_prefix='predict_'
+                        )
+                    except ImportError:
+                        # Fall back to manual interactive selection
+                        st.warning("⚠️ ไม่สามารถใช้โหมดคลิกเลือกอัตโนมัติได้ กำลังใช้โหมดเลือกด้วยตนเอง")
+                        st.info("💡 ติดตั้ง streamlit-image-coordinates เพื่อใช้โหมดคลิกเลือกอัตโนมัติ: `pip install streamlit-image-coordinates`")
+                        roi_x_offset, roi_y_offset = manual_interactive_roi_selection(
+                            image_array,
+                            roi_size=roi_size,
+                            session_key_prefix='predict_'
+                        )
+                    except Exception as e:
+                        # Handle other errors
+                        st.error(f"❌ เกิดข้อผิดพลาดในโหมด Interactive: {str(e)}")
+                        st.info("💡 กำลังใช้โหมดเลือกด้วยตนเองแทน")
+                        roi_x_offset, roi_y_offset = manual_interactive_roi_selection(
+                            image_array,
+                            roi_size=roi_size,
+                            session_key_prefix='predict_'
+                        )
                 else:
                     # Draw ROI rectangle on image (non-interactive mode)
                     image_with_roi = draw_roi_on_image(

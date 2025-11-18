@@ -189,9 +189,9 @@ R=189, G=188, B=201
    - คำนวณ Limit of Detection อัตโนมัติ
    - จากตัวอย่าง blank
 
-7. **Interactive ROI Selection**
-   - คลิกเลือกตำแหน่ง ROI บนภาพ
-   - ใช้ Plotly interactive visualization
+7. **Custom ROI Selection**
+   - เลือกตำแหน่ง ROI ด้วย 3x3 grid buttons
+   - ปรับละเอียดด้วย sliders
 
 ---
 
