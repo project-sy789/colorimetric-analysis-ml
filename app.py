@@ -1477,46 +1477,74 @@ def model_training_module():
                 
                 # Show R² score
                 st.subheader("ผลการเทรน")
+                
                 # Calculate additional metrics
-                from sklearn.metrics import mean_squared_error, mean_absolute_error
-                # Load data for metrics calculation
-                df_metrics = pd.read_csv(dataset_file)
-                X_metrics = df_metrics[['R', 'G', 'B']].values
-                y_metrics = df_metrics['Concentration'].values
-                y_pred = model.predict(X_metrics)
-                rmse = np.sqrt(mean_squared_error(y_metrics, y_pred))
-                mae = mean_absolute_error(y_metrics, y_pred)
+                try:
+                    from sklearn.metrics import mean_squared_error, mean_absolute_error
+                    # Load data for metrics calculation
+                    df_metrics = pd.read_csv(dataset_file)
+                    X_metrics = df_metrics[['R', 'G', 'B']].values
+                    y_metrics = df_metrics['Concentration'].values
+                    y_pred = model.predict(X_metrics)
+                    rmse = np.sqrt(mean_squared_error(y_metrics, y_pred))
+                    mae = mean_absolute_error(y_metrics, y_pred)
+                    metrics_calculated = True
+                except Exception as e:
+                    st.warning(f"⚠️ ไม่สามารถคำนวณ RMSE/MAE: {e}")
+                    rmse = None
+                    mae = None
+                    metrics_calculated = False
                 
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric(
-                        "R² Score", 
-                        f"{r2_score:.4f}",
-                        help="ค่า R² ยิ่งใกล้ 1 แสดงว่าโมเดลทำนายได้แม่นยำ"
-                    )
-                
-                with col2:
-                    accuracy_percent = r2_score * 100
-                    st.metric(
-                        "ความแม่นยำ",
-                        f"{accuracy_percent:.2f}%"
-                    )
-                
-                with col3:
-                    unit = st.session_state.get('current_unit', 'mg/L')
-                    st.metric(
-                        "RMSE",
-                        f"{rmse:.4f}",
-                        help=f"Root Mean Squared Error - ค่าเฉลี่ยของความคลาดเคลื่อน ({unit})"
-                    )
-                
-                with col4:
-                    st.metric(
-                        "MAE",
-                        f"{mae:.4f}",
-                        help=f"Mean Absolute Error - ค่าเฉลี่ยของความผิดพลาดสัมบูรณ์ ({unit})"
-                    )
+                # Display metrics
+                if metrics_calculated and rmse is not None and mae is not None:
+                    # Show all 4 metrics
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric(
+                            "R² Score", 
+                            f"{r2_score:.4f}",
+                            help="ค่า R² ยิ่งใกล้ 1 แสดงว่าโมเดลทำนายได้แม่นยำ"
+                        )
+                    
+                    with col2:
+                        accuracy_percent = r2_score * 100
+                        st.metric(
+                            "ความแม่นยำ",
+                            f"{accuracy_percent:.2f}%"
+                        )
+                    
+                    with col3:
+                        unit = st.session_state.get('current_unit', 'mg/L')
+                        st.metric(
+                            "RMSE",
+                            f"{rmse:.4f}",
+                            help=f"Root Mean Squared Error - ค่าเฉลี่ยของความคลาดเคลื่อน ({unit})"
+                        )
+                    
+                    with col4:
+                        st.metric(
+                            "MAE",
+                            f"{mae:.4f}",
+                            help=f"Mean Absolute Error - ค่าเฉลี่ยของความผิดพลาดสัมบูรณ์ ({unit})"
+                        )
+                else:
+                    # Show only R² and Accuracy if RMSE/MAE calculation failed
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.metric(
+                            "R² Score", 
+                            f"{r2_score:.4f}",
+                            help="ค่า R² ยิ่งใกล้ 1 แสดงว่าโมเดลทำนายได้แม่นยำ"
+                        )
+                    
+                    with col2:
+                        accuracy_percent = r2_score * 100
+                        st.metric(
+                            "ความแม่นยำ",
+                            f"{accuracy_percent:.2f}%"
+                        )
                 
                 # Show interpretation
                 if r2_score >= 0.9:
