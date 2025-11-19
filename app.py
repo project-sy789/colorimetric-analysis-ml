@@ -1548,6 +1548,14 @@ def model_training_module():
                 fig = plot_calibration_curve(df_plot, model, unit)
                 
                 if fig is not None:
+                    # Save calibration curve to file
+                    curve_file = f"{selected_profile}_calibration_curve.png"
+                    try:
+                        fig.savefig(curve_file, dpi=150, bbox_inches='tight')
+                        st.session_state[f'{selected_profile}_calibration_curve'] = curve_file
+                    except Exception as e:
+                        st.warning(f"⚠️ ไม่สามารถบันทึกกราฟ: {e}")
+                    
                     st.pyplot(fig)
                     st.success("✅ กราฟ Calibration Curve แสดงความสัมพันธ์ระหว่างค่าจริงและค่าทำนาย")
                     st.info("💡 จุดที่อยู่ใกล้เส้นแดง (y=x) แสดงว่าโมเดลทำนายได้แม่นยำ")
@@ -1563,6 +1571,14 @@ def model_training_module():
             st.error(f"❌ {str(e)}")
         except Exception as e:
             st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
+    
+    # Show saved Calibration Curve if exists
+    curve_file = f"{selected_profile}_calibration_curve.png"
+    if os.path.isfile(curve_file):
+        st.divider()
+        st.subheader("📈 Calibration Curve (บันทึกล่าสุด)")
+        st.image(curve_file, use_container_width=True, caption="กราฟความสัมพันธ์ระหว่างค่าจริงและค่าทำนาย")
+        st.info("💡 กราฟนี้ถูกบันทึกจากการเทรนครั้งล่าสุด - จุดที่อยู่ใกล้เส้นแดง (y=x) แสดงว่าโมเดลทำนายได้แม่นยำ")
     
     # Feature Importance and Hyperparameter Tuning (outside train button - always show if model exists)
     if os.path.isfile(model_file):
