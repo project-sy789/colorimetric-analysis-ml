@@ -1479,9 +1479,13 @@ def model_training_module():
                 st.subheader("ผลการเทรน")
                 # Calculate additional metrics
                 from sklearn.metrics import mean_squared_error, mean_absolute_error
-                y_pred = model.predict(X)
-                rmse = np.sqrt(mean_squared_error(y, y_pred))
-                mae = mean_absolute_error(y, y_pred)
+                # Load data for metrics calculation
+                df_metrics = pd.read_csv(dataset_file)
+                X_metrics = df_metrics[['R', 'G', 'B']].values
+                y_metrics = df_metrics['Concentration'].values
+                y_pred = model.predict(X_metrics)
+                rmse = np.sqrt(mean_squared_error(y_metrics, y_pred))
+                mae = mean_absolute_error(y_metrics, y_pred)
                 
                 col1, col2, col3, col4 = st.columns(4)
                 
