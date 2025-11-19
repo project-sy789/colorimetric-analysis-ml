@@ -752,13 +752,34 @@ def main():
                 st.session_state.profiles,
                 key="delete_profile_select"
             )
-            st.warning(f"⚠️ การลบจะไม่ลบไฟล์ dataset และ model")
+            st.warning(f"⚠️ การลบจะลบไฟล์ dataset และ model ทั้งหมดของ Profile นี้")
             if st.button("ลบ Profile", type="secondary", key="delete_profile_btn"):
                 if profile_to_delete in st.session_state.profiles:
+                    # ลบไฟล์ที่เกี่ยวข้อง
+                    files_to_delete = [
+                        f"{profile_to_delete}_dataset.csv",
+                        f"{profile_to_delete}_model.joblib",
+                        f"{profile_to_delete}_model_tuned.joblib"
+                    ]
+                    deleted_files = []
+                    for file in files_to_delete:
+                        if os.path.exists(file):
+                            try:
+                                os.remove(file)
+                                deleted_files.append(file)
+                            except Exception as e:
+                                st.error(f"❌ ไม่สามารถลบไฟล์ {file}: {e}")
+                    
+                    # ลบ profile จาก session state
                     st.session_state.profiles.remove(profile_to_delete)
                     if profile_to_delete in st.session_state.profile_units:
                         del st.session_state.profile_units[profile_to_delete]
-                    st.success(f"✅ ลบ Profile '{profile_to_delete}' สำเร็จ!")
+                    
+                    # แสดงผลลัพธ์
+                    if deleted_files:
+                        st.success(f"✅ ลบ Profile '{profile_to_delete}' และไฟล์ {len(deleted_files)} ไฟล์สำเร็จ!")
+                    else:
+                        st.success(f"✅ ลบ Profile '{profile_to_delete}' สำเร็จ! (ไม่มีไฟล์ที่ต้องลบ)")
                     st.rerun()
         else:
             st.info("ℹ️ ต้องมีอย่างน้อย 1 Profile")
