@@ -1549,10 +1549,10 @@ def model_training_module():
                 
                 if fig is not None:
                     # Save calibration curve to file
-                    curve_file = f"{selected_profile}_calibration_curve.png"
+                    curve_file = f"{profile_name}_calibration_curve.png"
                     try:
                         fig.savefig(curve_file, dpi=150, bbox_inches='tight')
-                        st.session_state[f'{selected_profile}_calibration_curve'] = curve_file
+                        st.session_state[f'{profile_name}_calibration_curve'] = curve_file
                     except Exception as e:
                         st.warning(f"⚠️ ไม่สามารถบันทึกกราฟ: {e}")
                     
@@ -1573,7 +1573,8 @@ def model_training_module():
             st.error(f"❌ เกิดข้อผิดพลาด: {str(e)}")
     
     # Show saved Calibration Curve if exists
-    curve_file = f"{selected_profile}_calibration_curve.png"
+    current_profile = st.session_state.get('current_profile', 'Default')
+    curve_file = f"{current_profile}_calibration_curve.png"
     if os.path.isfile(curve_file):
         st.divider()
         st.subheader("📈 Calibration Curve (บันทึกล่าสุด)")
