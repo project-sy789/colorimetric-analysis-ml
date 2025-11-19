@@ -1477,7 +1477,13 @@ def model_training_module():
                 
                 # Show R² score
                 st.subheader("ผลการเทรน")
-                col1, col2 = st.columns(2)
+                # Calculate additional metrics
+                from sklearn.metrics import mean_squared_error, mean_absolute_error
+                y_pred = model.predict(X)
+                rmse = np.sqrt(mean_squared_error(y, y_pred))
+                mae = mean_absolute_error(y, y_pred)
+                
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
                     st.metric(
@@ -1491,6 +1497,21 @@ def model_training_module():
                     st.metric(
                         "ความแม่นยำ",
                         f"{accuracy_percent:.2f}%"
+                    )
+                
+                with col3:
+                    unit = st.session_state.get('current_unit', 'mg/L')
+                    st.metric(
+                        "RMSE",
+                        f"{rmse:.4f}",
+                        help=f"Root Mean Squared Error - ค่าเฉลี่ยของความคลาดเคลื่อน ({unit})"
+                    )
+                
+                with col4:
+                    st.metric(
+                        "MAE",
+                        f"{mae:.4f}",
+                        help=f"Mean Absolute Error - ค่าเฉลี่ยของความผิดพลาดสัมบูรณ์ ({unit})"
                     )
                 
                 # Show interpretation
