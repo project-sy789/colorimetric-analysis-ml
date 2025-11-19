@@ -1897,9 +1897,11 @@ def prediction_module():
                     st.caption("**พารามิเตอร์:**")
                     st.caption(f"🌲 Trees: {temp_model.n_estimators}")
                     st.caption(f"📏 Max Depth: {temp_model.max_depth if temp_model.max_depth else 'ไม่จำกัด'}")
-                except:
+                    st.caption(f"📁 ไฟล์: `{os.path.basename(model_file)}`")
+                except Exception as e:
                     if 'last_r2_score' in st.session_state:
                         st.metric("R² Score", f"{st.session_state['last_r2_score']:.4f}")
+                    st.error(f"Error: {e}")
                 st.info("💡 โมเดลปกติ (เร็ว)")
             else:
                 selected_model_file = tuned_model_file
@@ -1921,9 +1923,11 @@ def prediction_module():
                     st.caption("**พารามิเตอร์:**")
                     st.caption(f"🌲 Trees: {temp_model.n_estimators}")
                     st.caption(f"📏 Max Depth: {temp_model.max_depth if temp_model.max_depth else 'ไม่จำกัด'}")
-                except:
+                    st.caption(f"📁 ไฟล์: `{os.path.basename(tuned_model_file)}`")
+                except Exception as e:
                     if 'last_tuning_score' in st.session_state:
                         st.metric("R² Score (CV)", f"{st.session_state['last_tuning_score']:.4f}")
+                    st.error(f"Error: {e}")
                 st.success("✨ โมเดล Tuned (แม่นยำสูงสุด)")
     
     st.divider()
