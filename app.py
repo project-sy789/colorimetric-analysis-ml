@@ -1879,13 +1879,43 @@ def prediction_module():
             # Show model info
             if model_choice == "โมเดลปกติ":
                 selected_model_file = model_file
-                if 'last_r2_score' in st.session_state:
-                    st.metric("R² Score", f"{st.session_state['last_r2_score']:.4f}")
+                # Try to load and calculate R² score
+                try:
+                    temp_model = load_model(model_file)
+                    if os.path.isfile(dataset_file):
+                        df = pd.read_csv(dataset_file)
+                        if len(df) >= 5 and all(col in df.columns for col in ['R', 'G', 'B', 'Concentration']):
+                            X = df[['R', 'G', 'B']].values
+                            y = df['Concentration'].values
+                            r2 = temp_model.score(X, y)
+                            st.metric("R² Score", f"{r2:.4f}", delta=f"{r2*100:.2f}%")
+                        elif 'last_r2_score' in st.session_state:
+                            st.metric("R² Score", f"{st.session_state['last_r2_score']:.4f}")
+                    elif 'last_r2_score' in st.session_state:
+                        st.metric("R² Score", f"{st.session_state['last_r2_score']:.4f}")
+                except:
+                    if 'last_r2_score' in st.session_state:
+                        st.metric("R² Score", f"{st.session_state['last_r2_score']:.4f}")
                 st.info("💡 โมเดลจากการเทรนปกติ")
             else:
                 selected_model_file = tuned_model_file
-                if 'last_tuning_score' in st.session_state:
-                    st.metric("R² Score (CV)", f"{st.session_state['last_tuning_score']:.4f}")
+                # Try to load and calculate R² score for tuned model
+                try:
+                    temp_model = load_model(tuned_model_file)
+                    if os.path.isfile(dataset_file):
+                        df = pd.read_csv(dataset_file)
+                        if len(df) >= 5 and all(col in df.columns for col in ['R', 'G', 'B', 'Concentration']):
+                            X = df[['R', 'G', 'B']].values
+                            y = df['Concentration'].values
+                            r2 = temp_model.score(X, y)
+                            st.metric("R² Score", f"{r2:.4f}", delta=f"{r2*100:.2f}%")
+                        elif 'last_tuning_score' in st.session_state:
+                            st.metric("R² Score (CV)", f"{st.session_state['last_tuning_score']:.4f}")
+                    elif 'last_tuning_score' in st.session_state:
+                        st.metric("R² Score (CV)", f"{st.session_state['last_tuning_score']:.4f}")
+                except:
+                    if 'last_tuning_score' in st.session_state:
+                        st.metric("R² Score (CV)", f"{st.session_state['last_tuning_score']:.4f}")
                 st.info("💡 โมเดลหลัง Hyperparameter Tuning (แนะนำ)")
     
     st.divider()
