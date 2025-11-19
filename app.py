@@ -1542,23 +1542,19 @@ def model_training_module():
                 
                 st.divider()
                 
-                # Plot calibration curve
-                st.subheader("📈 Calibration Curve")
+                # Save calibration curve to file (don't display here, will show below)
                 unit = st.session_state.get('current_unit', 'mg/L')
                 fig = plot_calibration_curve(df_plot, model, unit)
                 
                 if fig is not None:
-                    # Save calibration curve to file
                     curve_file = f"{profile_name}_calibration_curve.png"
                     try:
                         fig.savefig(curve_file, dpi=150, bbox_inches='tight')
                         st.session_state[f'{profile_name}_calibration_curve'] = curve_file
+                        plt.close(fig)  # Close figure to free memory
+                        st.success("✅ บันทึก Calibration Curve สำเร็จ - ดูได้ด้านล่าง")
                     except Exception as e:
                         st.warning(f"⚠️ ไม่สามารถบันทึกกราฟ: {e}")
-                    
-                    st.pyplot(fig)
-                    st.success("✅ กราฟ Calibration Curve แสดงความสัมพันธ์ระหว่างค่าจริงและค่าทำนาย")
-                    st.info("💡 จุดที่อยู่ใกล้เส้นแดง (y=x) แสดงว่าโมเดลทำนายได้แม่นยำ")
                 
         except FileNotFoundError as e:
             st.error(f"❌ {str(e)}")
